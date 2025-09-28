@@ -101,17 +101,17 @@ _Diagnóstico: Insuficiencia respiratoria aguda_
 
 Módulos Utilizados
 
-* re: Para expresiones regulares
-* os: Para limpieza de pantalla
-* sys: Para manejo del sistema
-* datetime: Para manejo de fechas y turnos
+* `re`: Para expresiones regulares
+* `os`: Para limpieza de pantalla
+* `sys`: Para manejo del sistema
+* `datetime`: Para manejo de fechas y turnos
 
 Funciones Clave
 
-* expandir_abreviaturas(): Convierte abreviaturas médicas
-* procesar_linea_paciente(): Parsea cada línea de paciente
-* generar_reporte(): Genera el reporte final formateado
-* obtener_fecha_turno(): Determina automáticamente fecha y turno
+* `expandir_abreviaturas()`: Convierte abreviaturas médicas
+* `procesar_linea_paciente()`: Parsea cada línea de paciente
+* `generar_reporte()`: Genera el reporte final formateado
+* `obtener_fecha_turno()`: Determina automáticamente fecha y turno
 
 #### 🏥 Contexto Hospitalario
 
