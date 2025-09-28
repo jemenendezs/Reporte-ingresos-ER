@@ -1,0 +1,221 @@
+# Licencia MIT
+# Copyright (c) 2025 Jorge Menéndez S.
+# Por la presente se concede permiso, sin cargo, a cualquier persona que obtenga una copia de este software y los archivos de documentación asociados (el "Software"), para tratar el Software sin restricción, incluidos, entre otros, los derechos de usar, copiar, modificar, fusionar, publicar, distribuir, sublicenciar y/o vender copias del Software, y para permitir a las personas a quienes se les proporcione el Software que lo hagan, sujeto a las siguientes condiciones:
+# El aviso de copyright anterior y este aviso de permiso se incluirán en todas las copias o partes sustanciales del Software.
+# EL SOFTWARE SE PROPORCIONA "TAL CUAL", SIN GARANTÍA DE NINGÚN TIPO, EXPRESA O IMPLÍCITA, INCLUYENDO PERO NO LIMITADA A LAS GARANTÍAS DE COMERCIABILIDAD, IDONEIDAD PARA UN PROPÓSITO PARTICULAR Y NO INFRACCIÓN. EN NINGÚN CASO LOS AUTORES O TITULARES DEL COPYRIGHT SERÁN RESPONSABLES POR NINGUNA RECLAMACIÓN, DAÑO U OTRA RESPONSABILIDAD, YA SEA EN UNA ACCIÓN DE CONTRATO, AGRAVIO O DE OTRO MODO, DERIVADA DE, O EN CONEXIÓN CON EL SOFTWARE O EL USO U OTRO TIPO DE ACCIONES EN EL SOFTWARE.
+
+import re
+import os
+import sys
+from datetime import datetime, timedelta
+
+# Diccionario de abreviaturas médicas
+ABREVIATURAS = {
+    "HTA": "Hipertensión arterial", "DM2": "Diabetes Mellitus tipo 2",
+    "IVU": "Infección de vías urinarias", "EPOC": "Enfermedad pulmonar obstructiva crónica",
+    "ERC HD": "Enfermedad renal crónica en hemodiálisis", "ERC": "Enfermedad renal crónica",
+    "ERA": "Enfermedad renal aguda", "IRA": "Insuficiencia respiratoria aguda",
+    "ICC": "Insuficiencia cardiaca congestiva", "SCA": "Síndrome coronario agudo",
+    "IAM": "Infarto agudo de miocardio", "ACV": "Accidente cerebrovascular",
+    "ECV": "Enfermedad cerebrovascular", "AIT": "Accidente isquémico transitorio",
+    "TB": "Tuberculosis", "NAC": "Neumonía adquirida en la comunidad",
+    "NIH": "Neumonía intrahospitalaria", "DP": "Derrame pleural",
+    "VIH": "Virus de la inmunodeficiencia humana", "HDA": "Hemorragia digestiva alta",
+    "HDB": "Hemorragia digestiva baja", "HD": "Hemodiálisis",
+    "FAV": "Fístula arteriovenosa", "PA": "Pancreatitis aguda",
+    "EMB": "Embarazo", "SG": "Semanas de gestación", "HIPERK": "Hiperkalemia",
+    "HIPERNA": "Hipernatremia", "HIPOK": "Hipokalemia", "HIPONA": "Hiponatremia",
+    "DNPC": "Desnutrición", "PPL": "Persona privada de la libertad",
+    "HPB": "Hiperplasia prostática benigna"
+}
+
+# Configuración de ubicaciones
+LUGARES = {"h": "HIDRATACIÓN", "hidrat": "HIDRATACIÓN", "hid": "HIDRATACIÓN",
+           "o": "OBSERVACIÓN", "obs": "OBSERVACIÓN", "vc": "VIGILANCIA CRÍTICA"}
+
+def limpiar_pantalla():
+    """Limpia la pantalla de la terminal"""
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+def expandir_abreviaturas(texto):
+    """Reemplaza abreviaturas médicas por su significado completo"""
+    for abrev in sorted(ABREVIATURAS.keys(), key=len, reverse=True):
+        patron = r'\b' + re.escape(abrev) + r'\b'
+        texto = re.sub(patron, ABREVIATURAS[abrev], texto, flags=re.IGNORECASE)
+    return texto
+
+def obtener_fecha_turno():
+    """Determina fecha y turno actual"""
+    ahora = datetime.now()
+    if 18 <= ahora.hour <= 21:
+        return ahora.strftime("%d/%m/%Y"), "AM"
+    elif 6 <= ahora.hour <= 9:
+        return (ahora - timedelta(days=1)).strftime("%d/%m/%Y"), "PM"
+    return ahora.strftime("%d/%m/%Y"), "AM"
+
+def formatear_nombre(nombre):
+    """Formatea nombre como 'APELLIDOS, NOMBRE'"""
+    partes = nombre.strip().split()
+    if len(partes) >= 2:
+        return f"{' '.join(partes[:-1]).upper()}, {partes[-1].upper()}"
+    return nombre.upper()
+
+def traducir_lugar(lugar):
+    """Traduce código de ubicación a texto completo"""
+    return LUGARES.get(lugar.lower().strip(), lugar.upper())
+
+def procesar_linea_paciente(linea, tipo):
+    """Procesa una línea de paciente según el tipo (coordinado/pendiente)"""
+    if tipo == "coordinado":
+        match = re.match(r"(.+?)\s*(?:\.{2,}|Dx|\s-\s)\s*(.+?)\.\s*(\w+)\s*(\d+)", linea, re.IGNORECASE)
+        if match:
+            nombre, dx, lugar, cama = match.groups()
+            dx_limpio = re.sub(r'^\s*Dx\s*', '', dx.strip(), flags=re.IGNORECASE)
+            return (formatear_nombre(nombre), 
+                    expandir_abreviaturas(dx_limpio),
+                    f"→ 🛏️ *{traducir_lugar(lugar)}, CAMA {cama.upper()}*")
+    
+    elif tipo == "pendiente":
+        match = re.match(r"(.+?)\s*(?:\.{2,}|Dx|\s-\s)\s*(.+?)\.\s*(cn|sn)(.*)", linea, re.IGNORECASE)
+        if match:
+            nombre, dx, nota, comentario = match.groups()
+            dx_limpio = re.sub(r'^\s*Dx\s*', '', dx.strip(), flags=re.IGNORECASE)
+            nota_fmt = "✅ Con nota" if nota.lower() == "cn" else "❌ Sin nota"
+            
+            comentario_fmt = ""
+            if comentario.strip():
+                comentario_limpio = comentario.strip(" .")
+                comentario_expandido = expandir_abreviaturas(comentario_limpio)
+                comentario_fmt = f"\n💬 {comentario_expandido[0].upper()}{comentario_expandido[1:]}"
+                if not comentario_fmt.endswith('.'):
+                    comentario_fmt += '.'
+            
+            return (formatear_nombre(nombre), 
+                    expandir_abreviaturas(dx_limpio),
+                    nota_fmt + comentario_fmt)
+    
+    return None
+
+def procesar_coordinados(texto):
+    """Procesa bloque de pacientes coordinados"""
+    resultados = []
+    for linea in [l.strip() for l in texto.split("\n") if l.strip()]:
+        if datos := procesar_linea_paciente(linea, "coordinado"):
+            nombre, dx, ubicacion = datos
+            resultados.append(f"{nombre}\n_Diagnóstico: {dx}_\n{ubicacion}")
+    return resultados
+
+def procesar_pendientes(texto):
+    """Procesa bloque de pacientes pendientes ordenados por fecha"""
+    fechas_pacientes = []
+    fecha_actual, pacientes_actual = None, []
+    
+    for linea in [l.strip() for l in texto.split("\n") if l.strip()]:
+        if re.match(r"\d{1,2}/\d{1,2}", linea):
+            if fecha_actual and pacientes_actual:
+                fechas_pacientes.append((fecha_actual, pacientes_actual))
+            fecha_actual, pacientes_actual = linea, []
+        elif fecha_actual:
+            pacientes_actual.append(linea)
+    
+    if fecha_actual and pacientes_actual:
+        fechas_pacientes.append((fecha_actual, pacientes_actual))
+    
+    # Ordenar por fecha
+    fechas_ordenadas = []
+    for fecha, pacientes in fechas_pacientes:
+        try:
+            dia, mes = map(int, fecha.split('/')[:2])
+            año = datetime.now().year - (1 if mes > datetime.now().month else 0)
+            fechas_ordenadas.append((datetime(año, mes, dia), pacientes))
+        except (ValueError, IndexError):
+            continue
+    
+    fechas_ordenadas.sort()
+    
+    # Formatear salida
+    salida = []
+    for fecha_dt, pacientes in fechas_ordenadas:
+        salida.append(f"*{fecha_dt.strftime('%d/%m/%Y')}*")
+        for idx, linea_pac in enumerate(pacientes, 1):
+            if datos := procesar_linea_paciente(linea_pac, "pendiente"):
+                nombre, dx, info = datos
+                salida.append(f"{idx}. {nombre}\n_Diagnóstico: {dx}_\n{info}")
+        salida.append("")
+    
+    return salida
+
+def generar_reporte(texto_raw):
+    """Genera el reporte completo formateado para WhatsApp"""
+    fecha, turno = obtener_fecha_turno()
+    encabezado = f"🏥 *GUARDIA {fecha} {turno}*"
+    
+    # Separar secciones
+    if "Pendientes" in texto_raw:
+        partes = texto_raw.split("Pendientes")
+        coord_texto = partes[0].replace("Coordinados", "").strip()
+        pend_texto = partes[1].strip()
+    else:
+        coord_texto = texto_raw.replace("Coordinados", "").strip()
+        pend_texto = ""
+    
+    # Construir reporte
+    lineas = [encabezado, ""]
+    
+    if coord_texto:
+        lineas.extend(["📝 *INGRESOS COORDINADOS*", ""])
+        coordinados = procesar_coordinados(coord_texto)
+        for i, coord in enumerate(coordinados, 1):
+            lineas.append(f"{i}. {coord}")
+            lineas.append("")
+    
+    if pend_texto:
+        lineas.extend(["⚕️ *INGRESOS PENDIENTES DE MEDICINA INTERNA*", ""])
+        lineas.extend(procesar_pendientes(pend_texto))
+    
+    return "\n".join(lineas)
+
+def leer_entrada_usuario():
+    """
+    Lee múltiples líneas de entrada hasta que el usuario presiona Ctrl+D/Ctrl+Z
+    """
+    print("Pega el texto plano. Finaliza con Ctrl+D (Linux/Mac) o Ctrl+Z (Windows) y Enter:")
+    print()
+    
+    lineas = []
+    try:
+        while True:
+            linea = input()
+            lineas.append(linea)
+    except EOFError:
+        # Ctrl+D o Ctrl+Z presionado
+        pass
+    
+    return "\n".join(lineas)
+
+def main():
+    """Función principal"""
+    limpiar_pantalla()
+    print("📋 Formateador de Reporte Médico para WhatsApp")
+    print("=" * 50)
+    
+    try:
+        # Leer entrada del usuario
+        texto_raw = leer_entrada_usuario()
+        
+        if not texto_raw.strip():
+            print("❌ No se ingresó texto. El programa terminará.")
+            return
+        
+        # Limpiar pantalla y mostrar resultado formateado
+        limpiar_pantalla()
+        reporte = generar_reporte(texto_raw)
+        print(reporte)
+        
+    except KeyboardInterrupt:
+        print("\n\n❌ Programa interrumpido por el usuario.")
+    except Exception as e:
+        print(f"\n❌ Error inesperado: {e}")
+
+if __name__ == "__main__":
+    main()
